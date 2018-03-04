@@ -14,17 +14,29 @@ data Piece = Piece {
     pieceColor :: Color,
     pieceText :: String
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Piece where
+  show p = pieceText p
 
 data Cycle = Cycle {
     radial :: [Piece],
     triangles :: [Piece],
     boundary :: [Piece]
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Cycle where
+  show c = printf "Cycle\nradial:\t%s\ntriangles:\t%s\nboundary:\t%s\n"
+             (show $ radial c)
+             (show $ triangles c)
+             (show $ boundary c)
 
 data Field = Field [Cycle]
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Field where
+  show (Field cycles) = concat $ map show cycles
 
 data PieceLocation = Radial | Triangle | Boundary
   deriving (Eq, Show)
@@ -51,35 +63,74 @@ instance Show FieldCoordinate where
 
 type Equation = (FieldCoordinate, FieldCoordinate)
 
+mkRadial :: Int -> Int -> FieldCoordinate
+mkRadial c k = FieldCoordinate c (CycleCoordinate Radial k)
+
+mkTriangle :: Int -> Int -> FieldCoordinate
+mkTriangle c k = FieldCoordinate c (CycleCoordinate Triangle k)
+
+mkBoundary :: Int -> Int -> FieldCoordinate
+mkBoundary c k = FieldCoordinate c (CycleCoordinate Boundary k)
+
 equations :: [Equation]
 equations =
-  let radial c k = FieldCoordinate c (CycleCoordinate Radial k)
-      triangle c k = FieldCoordinate c (CycleCoordinate Triangle k)
-      boundary c k = FieldCoordinate c (CycleCoordinate Boundary k)
-  in [
-      (radial 0 1, boundary 1 5),
-      (radial 0 2, boundary 2 0),
-      (radial 0 2, radial 1 5),
-      (radial 0 3, radial 2 0),
-      (radial 0 3, boundary 1 4),
-      (radial 0 4, boundary 2 5),
-      (triangle 0 1, triangle 1 5),
-      (triangle 0 2, triangle 1 4),
-      (triangle 0 2, triangle 2 0),
-      (triangle 0 3, triangle 2 5),
-      (boundary 0 1, radial 1 0),
-      (boundary 0 2, radial 2 1),
-      (boundary 0 2, radial 1 4),
-      (boundary 0 3, radial 2 5),
-      (radial 1 3, boundary 2 1),
-      (triangle 1 3, triangle 2 1),
-      (boundary 1 3, radial 2 2)
+    [
+      (mkRadial 0 1, mkBoundary 1 5),
+      (mkRadial 0 2, mkBoundary 2 0),
+      (mkRadial 0 2, mkRadial 1 5),
+      (mkRadial 0 3, mkRadial 2 0),
+      (mkRadial 0 3, mkBoundary 1 4),
+      (mkRadial 0 4, mkBoundary 2 5),
+      (mkTriangle 0 1, mkTriangle 1 5),
+      (mkTriangle 0 2, mkTriangle 1 4),
+      (mkTriangle 0 2, mkTriangle 2 0),
+      (mkTriangle 0 3, mkTriangle 2 5),
+      (mkBoundary 0 1, mkRadial 1 0),
+      (mkBoundary 0 2, mkRadial 2 1),
+      (mkBoundary 0 2, mkRadial 1 4),
+      (mkBoundary 0 3, mkRadial 2 5),
+      (mkRadial 1 3, mkBoundary 2 1),
+      (mkTriangle 1 3, mkTriangle 2 1),
+      (mkBoundary 1 3, mkRadial 2 2)
     ]
 
 allEquations :: [Equation]
 allEquations = equations `union` map swp equations
   where
     swp (c1,c2) = (c2, c1)
+
+isCanonical :: FieldCoordinate -> Bool
+isCanonical fc@(FieldCoordinate 0 _) = True
+isCanonical fc@(FieldCoordinate 1 _) = fc `notElem` map fst allEquations
+isCanonical fc@(FieldCoordinate 2 _) = not $ any check allEquations
+  where
+    check (fc2, FieldCoordinate 0 _) = fc2 == fc
+    check _ = False
+
+
+canonicalize :: FieldCoordinate -> FieldCoordinate
+canonicalize fc =
+  case lookup fc allEquations of
+    Nothing -> fc
+    Just fc' -> if isCanonical fc'
+                  then fc'
+                  else canonicalize fc'
+
+isCycle :: [Int] -> FieldCoordinate -> Bool
+isCycle fcis (FieldCoordinate fci _) = fci `elem` fcis
+
+toCycle :: [Int] -> FieldCoordinate -> FieldCoordinate
+toCycle fcis fc =
+    case find allEquations of
+      Nothing -> fc
+      Just fc' -> if isCycle fcis fc'
+                    then fc'
+                    else toCycle fcis fc'
+  where
+    find [] = Nothing
+    find ((src,dst):eqs)
+      | fcCycle dst `elem` fcis && src == fc = Just dst
+      | otherwise = find eqs
 
 getelt :: FieldCoordinate -> Field -> Piece
 getelt (FieldCoordinate fci co) (Field cycles) = geteltC co (cycles !! fci)
@@ -109,62 +160,52 @@ rotateCycle c =
     boundary = rotateList (boundary c)
   }
 
-updateCycle :: Int -> [Cycle] -> Cycle
-updateCycle fci cycles =
-  let ourEquations = filter our allEquations
-      our (fc,_) = fcCycle fc == fci
-      radialEqs = filter (isRadial . fst) ourEquations
-      triangleEqs = filter (isTriangle . fst) ourEquations
-      boundaryEqs = filter (isBoundary . fst) ourEquations
-
-      isRadial (FieldCoordinate _ (CycleCoordinate Radial _)) = True
-      isRadial _ = False
-
-      isTriangle (FieldCoordinate _ (CycleCoordinate Triangle _)) = True
-      isTriangle _ = False
-
-      isBoundary (FieldCoordinate _ (CycleCoordinate Boundary _)) = True
-      isBoundary _ = False
-
-      apply :: [Equation] -> FieldCoordinate -> Piece
-      apply eqs fc = case lookup fc eqs of
-                       Nothing -> getelt fc (Field cycles)
-                       Just fc' -> getelt fc' (Field cycles)
+updateCycle :: Int -> [Int] -> [Cycle] -> Cycle
+updateCycle targetIdx srcIdxs cycles =
+  let field = Field cycles
+      getelt' fc = getelt (toCycle srcIdxs fc) field
   in Cycle {
-       radial = map (apply radialEqs) [FieldCoordinate fci (CycleCoordinate Radial idx) | idx <- [0..5]],
-       triangles = map (apply triangleEqs) [FieldCoordinate fci (CycleCoordinate Triangle idx) | idx <- [0..5]],
-       boundary = map (apply boundaryEqs) [FieldCoordinate fci (CycleCoordinate Boundary idx) | idx <- [0..5]]
+       radial = map getelt' [mkRadial targetIdx idx | idx <- [0..5]],
+       triangles = map getelt' [mkTriangle targetIdx idx | idx <- [0..5]],
+       boundary = map getelt' [mkBoundary targetIdx idx | idx <- [0..5]]
+     }
+
+mkCycle :: Color -> Int -> Cycle
+mkCycle color fci = Cycle {
+       radial = [Piece Two color (show fci++"R"++show idx) | idx <- [0..5]],
+       triangles = [Piece Three color (show fci++"T"++show idx) | idx <- [0..5]],
+       boundary = [Piece Two color (show fci++"B"++show idx) | idx <- [0..5]]
      }
 
 initialField :: Field
 initialField = Field [c0, c1, c2]
   where
-    mkCycle color fci = Cycle {
-           radial = [Piece Two color (show fci++"R"++show idx) | idx <- [0..5]],
-           triangles = [Piece Three color (show fci++"T"++show idx) | idx <- [0..5]],
-           boundary = [Piece Two color (show fci++"B"++show idx) | idx <- [0..5]]
-         }
-
     c0 = mkCycle red 0
 
     c1_ = mkCycle green 1
     c2_ = mkCycle blue 2
 
-    c1 = updateCycle 1 [c0, c1_, c2_]
-    c2 = updateCycle 2 [c0, c1_, c2_]
+    c1 = updateCycle 1 [0,2] [c0, c1_, c2]
+    c2 = updateCycle 2 [0] [c0, c1_, c2_]
 
 rotate0 :: Field -> Field
 rotate0 (Field [c0,c1,c2]) = Field [c0', c1', c2']
   where
     c0' = rotateCycle c0
-    c1' = updateCycle 1 [c0', c1, c2]
-    c2' = updateCycle 2 [c0', c1, c2]
+    c1' = updateCycle 1 [0] [c0', c1, c2]
+    c2' = updateCycle 2 [0] [c0', c1, c2]
 
--- rotate2 :: Field -> Field
--- rotate2 f = f {
---       fCycle0 = update0 
---       fCycle1 = 
---       fCycle2 = 
---     }
---   where
---     r = rotateList (fCycle2 f)
+rotate1 :: Field -> Field
+rotate1 (Field [c0, c1, c2]) = Field [c0', c1', c2']
+  where
+    c0' = updateCycle 0 [1] [c0, c1', c2]
+    c1' = rotateCycle c1
+    c2' = updateCycle 2 [1] [c0, c1', c2]
+
+rotate2 :: Field -> Field
+rotate2 (Field [c0, c1, c2]) = Field [c0', c1', c2']
+  where
+    c0' = updateCycle 0 [2] [c0, c1, c2']
+    c1' = updateCycle 1 [2] [c0, c1, c2']
+    c2' = rotateCycle c2
+

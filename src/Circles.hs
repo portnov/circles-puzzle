@@ -59,20 +59,16 @@ piece3 dt radius = pictures [
 label :: String -> Picture -> Picture
 label str p = pictures [p, scale 0.07 0.07 $ color black (text str)]
 
-drawCycle :: [CycleCoordinate] -> Cycle -> Picture
-drawCycle exclusions c = pictures $
+drawCycle :: (CycleCoordinate -> Bool) -> Cycle -> Picture
+drawCycle check c = pictures $
     map drawRadial (enumerate $ radial c) ++ 
     map drawTriangle (enumerate $ triangles c) ++
     map drawBoundary (enumerate $ boundary c)
   where
     enumerate lst = zip [0..] lst
 
-    radialE = [idx | CycleCoordinate Radial idx <- exclusions]
-    triangleE = [idx | CycleCoordinate Triangle idx <- exclusions]
-    boundaryE = [idx | CycleCoordinate Boundary idx <- exclusions]
-
     drawRadial (idx, p) =
-      if idx `elem` radialE
+      if not $ check $ CycleCoordinate Radial idx
         then blank
         else
           rotate (- fromIntegral idx * 60) $
@@ -82,7 +78,7 @@ drawCycle exclusions c = pictures $
           piece2 dt radius
 
     drawTriangle (idx, p) =
-      if idx `elem` triangleE
+      if not $ check $ CycleCoordinate Triangle idx
         then blank
         else
           rotate (- fromIntegral idx * 60) $
@@ -93,7 +89,7 @@ drawCycle exclusions c = pictures $
           piece3 dt radius
 
     drawBoundary (idx, p) = 
-      if idx `elem` boundaryE
+      if not $ check $ CycleCoordinate Boundary idx
         then blank
         else
           rotate (- fromIntegral idx * 60) $
@@ -106,12 +102,9 @@ drawCycle exclusions c = pictures $
 drawField :: Field -> Picture
 drawField (Field [c0, c1, c2]) = pictures [c0p, c1p, c2p]
   where
-    c0p = translate (radius/2) (-sqrt36*radius) $ drawCycle [] c0
+    c0p = translate (radius/2) (-sqrt36*radius) $ drawCycle (check 0) c0
+    c1p = translate 0 (sqrt33*radius) $ drawCycle (check 1) c1
+    c2p = translate (-radius/2) (-sqrt36*radius) $ drawCycle (check 2) c2
 
-    c1p = translate 0 (sqrt33*radius) $ drawCycle c1exclusions c1
-
-    c2p = translate (-radius/2) (-sqrt36*radius) $ drawCycle c2exclusions c2
-
-    c1exclusions = nub [co | FieldCoordinate 1 co <- map fst allEquations]
-    c2exclusions = nub [co | (FieldCoordinate 2 co, FieldCoordinate 0 _) <- allEquations]
+    check fci co = isCanonical $ FieldCoordinate fci co
 
