@@ -3,7 +3,8 @@ module Types where
 
 import Control.Lens
 import Text.Printf
-import Data.List (union)
+import Data.List (union, nub, (\\))
+import Debug.Trace
 import Graphics.Gloss
 
 data PieceKind = Two | Three
@@ -62,6 +63,13 @@ instance Show FieldCoordinate where
     printf "%s[%s][%s]" (show loc) (show fci) (show idx)
 
 type Equation = (FieldCoordinate, FieldCoordinate)
+
+piecesList :: Field -> [Piece]
+piecesList fld =
+  let rs = [mkRadial fci idx | fci <- [0..2], idx <- [0..5]]
+      ts = [mkTriangle fci idx | fci <- [0..2], idx <- [0..5]]
+      bs = [mkBoundary fci idx | fci <- [0..2], idx <- [0..5]]
+  in  [geteltX co fld | co <- (rs++ts++bs), isCanonical co]
 
 mkRadial :: Int -> Int -> FieldCoordinate
 mkRadial c k = FieldCoordinate c (CycleCoordinate Radial k)
@@ -132,8 +140,8 @@ toCycle fcis fc =
       | fcCycle dst `elem` fcis && src == fc = Just dst
       | otherwise = find eqs
 
-getelt :: FieldCoordinate -> Field -> Piece
-getelt (FieldCoordinate fci co) (Field cycles) = geteltC co (cycles !! fci)
+geteltX :: FieldCoordinate -> Field -> Piece
+geteltX (FieldCoordinate fci co) (Field cycles) = geteltC co (cycles !! fci)
 
 geteltC :: CycleCoordinate -> Cycle -> Piece
 geteltC (CycleCoordinate Radial idx) c = radial c !! idx
@@ -160,10 +168,17 @@ rotateCycle c =
     boundary = rotateList (boundary c)
   }
 
+rotateC :: Int -> (FieldCoordinate -> FieldCoordinate)
+rotateC fci fc@(FieldCoordinate fci' co@(CycleCoordinate t idx))
+    | fci == fci' = fc {fcWithinCycle = CycleCoordinate t ((idx-1)%6)}
+    | otherwise   = fc
+
+apply ::
+
 updateCycle :: Int -> [Int] -> [Cycle] -> Cycle
 updateCycle targetIdx srcIdxs cycles =
   let field = Field cycles
-      getelt' fc = getelt (toCycle srcIdxs fc) field
+      getelt' fc = geteltX (toCycle srcIdxs fc) field
   in Cycle {
        radial = map getelt' [mkRadial targetIdx idx | idx <- [0..5]],
        triangles = map getelt' [mkTriangle targetIdx idx | idx <- [0..5]],
@@ -188,24 +203,41 @@ initialField = Field [c0, c1, c2]
     c1 = updateCycle 1 [0,2] [c0, c1_, c2]
     c2 = updateCycle 2 [0] [c0, c1_, c2_]
 
+checkUniq :: Field -> Field
+checkUniq f =
+  let lst = piecesList f
+  in  if nub lst == lst
+        then f
+        else trace ("Field:\n" ++ show f ++ "\nList: " ++ show lst ++ "\nDiff: " ++ show (lst \\ nub lst)) f
+
+remapCycle :: Int -> [Cycle] -> Cycle
+remapCycle targetIdx cycles =
+  let field = Field cycles
+      getelt' fc = geteltX (canonicalize fc) field
+  in Cycle {
+       radial = map getelt' [mkRadial targetIdx idx | idx <- [0..5]],
+       triangles = map getelt' [mkTriangle targetIdx idx | idx <- [0..5]],
+       boundary = map getelt' [mkBoundary targetIdx idx | idx <- [0..5]]
+     }
+
 rotate0 :: Field -> Field
-rotate0 (Field [c0,c1,c2]) = Field [c0', c1', c2']
+rotate0 (Field [c0,c1,c2]) = checkUniq $ Field [c0', c1', c2']
   where
     c0' = rotateCycle c0
-    c1' = updateCycle 1 [0] [c0', c1, c2]
-    c2' = updateCycle 2 [0] [c0', c1, c2]
+    c1' = remapCycle 1 [c0', c1, c2]
+    c2' = remapCycle 2 [c0', c1, c2]
 
 rotate1 :: Field -> Field
-rotate1 (Field [c0, c1, c2]) = Field [c0', c1', c2']
+rotate1 (Field [c0, c1, c2]) = checkUniq $ Field [c0', c1', c2']
   where
-    c0' = updateCycle 0 [1] [c0, c1', c2]
+    c0' = remapCycle 0 [c0, c1', c2]
     c1' = rotateCycle c1
-    c2' = updateCycle 2 [1] [c0, c1', c2]
+    c2' = remapCycle 2 [c0, c1', c2]
 
 rotate2 :: Field -> Field
-rotate2 (Field [c0, c1, c2]) = Field [c0', c1', c2']
+rotate2 (Field [c0, c1, c2]) = checkUniq $ Field [c0', c1', c2']
   where
-    c0' = updateCycle 0 [2] [c0, c1, c2']
-    c1' = updateCycle 1 [2] [c0, c1, c2']
+    c0' = remapCycle 0 [c0, c1, c2']
+    c1' = remapCycle 1 [c0, c1, c2']
     c2' = rotateCycle c2
 
