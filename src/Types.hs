@@ -174,19 +174,18 @@ rotateList :: [a] -> [a]
 rotateList [] = []
 rotateList lst = last lst : init lst
 
-rotateCycle :: Cycle -> Cycle
-rotateCycle c =
-  c {
-    radial = rotateList (radial c),
-    triangles = rotateList (triangles c),
-    boundary = rotateList (boundary c)
-  }
-
-rotateC :: Int -> (FieldCoordinate -> FieldCoordinate)
-rotateC fci fc = go (toCycle [fci] fc)
+rotateCycleClockwise :: Int -> (FieldCoordinate -> FieldCoordinate)
+rotateCycleClockwise fci fc = go (toCycle [fci] fc)
   where
     go fc@(FieldCoordinate fci' co@(CycleCoordinate t idx))
         | fci == fci' = fc {fcWithinCycle = CycleCoordinate t ((idx-1) `mod` 6)}
+        | otherwise   = fc
+
+rotateCycleCounterClockwise :: Int -> (FieldCoordinate -> FieldCoordinate)
+rotateCycleCounterClockwise fci fc = go (toCycle [fci] fc)
+  where
+    go fc@(FieldCoordinate fci' co@(CycleCoordinate t idx))
+        | fci == fci' = fc {fcWithinCycle = CycleCoordinate t ((idx+1) `mod` 6)}
         | otherwise   = fc
 
 apply :: (FieldCoordinate -> FieldCoordinate) -> Field -> Field
@@ -229,12 +228,21 @@ checkUniq f =
         then f
         else trace ("Field:\n" ++ show f ++ "\nList: " ++ show lst ++ "\nDiff: " ++ show (lst \\ nub lst)) f
 
-rotate0 :: Field -> Field
-rotate0 f = checkUniq $ apply (rotateC 0) f
+rotate0cw :: Field -> Field
+rotate0cw f = checkUniq $ apply (rotateCycleClockwise 0) f
 
-rotate1 :: Field -> Field
-rotate1 f = checkUniq $ apply (rotateC 1) f
+rotate1cw :: Field -> Field
+rotate1cw f = checkUniq $ apply (rotateCycleClockwise 1) f
 
-rotate2 :: Field -> Field
-rotate2 f = checkUniq $ apply (rotateC 2) f
+rotate2cw :: Field -> Field
+rotate2cw f = checkUniq $ apply (rotateCycleClockwise 2) f
+
+rotate0ccw :: Field -> Field
+rotate0ccw f = checkUniq $ apply (rotateCycleCounterClockwise 0) f
+
+rotate1ccw :: Field -> Field
+rotate1ccw f = checkUniq $ apply (rotateCycleCounterClockwise 1) f
+
+rotate2ccw :: Field -> Field
+rotate2ccw f = checkUniq $ apply (rotateCycleCounterClockwise 2) f
 

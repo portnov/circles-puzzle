@@ -17,9 +17,12 @@ data Game = Game {
   }
 
 handler :: Event -> Game -> Game
-handler (EventKey (Char '1') Up _ _) g = g {gField = rotate0 (gField g)}
-handler (EventKey (Char '2') Up _ _) g = g {gField = rotate1 (gField g)}
-handler (EventKey (Char '3') Up _ _) g = g {gField = rotate2 (gField g)}
+handler (EventKey (Char 'd') Up (Modifiers {shift=Up}) _) g = g {gField = rotate0cw (gField g)}
+handler (EventKey (Char 'w') Up (Modifiers {shift=Up}) _) g = g {gField = rotate1cw (gField g)}
+handler (EventKey (Char 'a') Up (Modifiers {shift=Up}) _) g = g {gField = rotate2cw (gField g)}
+handler (EventKey (Char 'D') Up (Modifiers {shift=Down}) _) g = g {gField = rotate0ccw (gField g)}
+handler (EventKey (Char 'W') Up (Modifiers {shift=Down}) _) g = g {gField = rotate1ccw (gField g)}
+handler (EventKey (Char 'A') Up (Modifiers {shift=Down}) _) g = g {gField = rotate2ccw (gField g)}
 handler evt g = g {gView = updateViewStateWithEvent evt (gView g)}
 
 animation :: Float -> Game -> Game
