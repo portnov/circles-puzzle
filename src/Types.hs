@@ -228,21 +228,9 @@ checkUniq f =
         then f
         else trace ("Field:\n" ++ show f ++ "\nList: " ++ show lst ++ "\nDiff: " ++ show (lst \\ nub lst)) f
 
-rotate0cw :: Field -> Field
-rotate0cw f = checkUniq $ apply (rotateCycleClockwise 0) f
+rotateCw :: Int -> Field -> Field
+rotateCw idx f = checkUniq $ apply (rotateCycleClockwise idx) f
 
-rotate1cw :: Field -> Field
-rotate1cw f = checkUniq $ apply (rotateCycleClockwise 1) f
-
-rotate2cw :: Field -> Field
-rotate2cw f = checkUniq $ apply (rotateCycleClockwise 2) f
-
-rotate0ccw :: Field -> Field
-rotate0ccw f = checkUniq $ apply (rotateCycleCounterClockwise 0) f
-
-rotate1ccw :: Field -> Field
-rotate1ccw f = checkUniq $ apply (rotateCycleCounterClockwise 1) f
-
-rotate2ccw :: Field -> Field
-rotate2ccw f = checkUniq $ apply (rotateCycleCounterClockwise 2) f
+rotateCcw :: Int -> Field -> Field
+rotateCcw idx f = checkUniq $ apply (rotateCycleCounterClockwise idx) f
 

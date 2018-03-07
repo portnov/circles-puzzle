@@ -99,12 +99,24 @@ drawCycle check c = pictures $
           label (pieceText p) $
           piece2 dt radius
 
+center0 :: Point
+center0 = (radius/2, -sqrt36*radius) 
+
+center1 :: Point
+center1 = (0, sqrt33*radius) 
+
+center2 :: Point
+center2 = (-radius/2, -sqrt36*radius) 
+
+cycleCenters :: [Point]
+cycleCenters = [center0, center1, center2]
+
 drawField :: Field -> Picture
 drawField (Field [c0, c1, c2]) = pictures [c0p, c1p, c2p]
   where
-    c0p = translate (radius/2) (-sqrt36*radius) $ drawCycle (check 0) c0
-    c1p = translate 0 (sqrt33*radius) $ drawCycle (check 1) c1
-    c2p = translate (-radius/2) (-sqrt36*radius) $ drawCycle (check 2) c2
+    c0p = translate (fst center0) (snd center0) $ drawCycle (check 0) c0
+    c1p = translate (fst center1) (snd center1) $ drawCycle (check 1) c1
+    c2p = translate (fst center2) (snd center2) $ drawCycle (check 2) c2
 
     check fci co = isCanonical $ FieldCoordinate fci co
 
