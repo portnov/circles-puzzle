@@ -3,6 +3,7 @@ module Types where
 
 import Control.Lens
 import Text.Printf
+import Data.Monoid
 import Data.List (union, nub, (\\))
 import Debug.Trace
 import Graphics.Gloss
@@ -143,18 +144,31 @@ toCycle fcis fc =
 geteltX :: FieldCoordinate -> Field -> Piece
 geteltX (FieldCoordinate fci co) (Field cycles) = geteltC co (cycles !! fci)
 
+getelt :: FieldCoordinate -> Field -> Piece
+getelt fc f = geteltX (canonicalize fc) f
+
 geteltC :: CycleCoordinate -> Cycle -> Piece
 geteltC (CycleCoordinate Radial idx) c = radial c !! idx
 geteltC (CycleCoordinate Triangle idx) c = triangles c !! idx
 geteltC (CycleCoordinate Boundary idx) c = boundary c !! idx
 
+seteltX :: FieldCoordinate -> Piece -> Field -> Field
+seteltX (FieldCoordinate fci co) p (Field cycles) = Field $ cycles & element fci %~ seteltC co p
+
 setelt :: FieldCoordinate -> Piece -> Field -> Field
-setelt (FieldCoordinate fci co) p (Field cycles) = Field $ cycles & element fci %~ seteltC co p
+setelt fc p f = seteltX (canonicalize fc) p f
 
 seteltC :: CycleCoordinate -> Piece -> Cycle -> Cycle
 seteltC (CycleCoordinate Radial idx) p c = c {radial = radial c & element idx .~ p}
 seteltC (CycleCoordinate Triangle idx) p c = c {triangles = triangles c & element idx .~ p}
 seteltC (CycleCoordinate Boundary idx) p c = c {boundary = boundary c & element idx .~ p}
+
+allCanonicalCoordinates :: [FieldCoordinate]
+allCanonicalCoordinates =
+  let rs = [mkRadial fci idx | fci <- [0..2], idx <- [0..5]]
+      ts = [mkTriangle fci idx | fci <- [0..2], idx <- [0..5]]
+      bs = [mkBoundary fci idx | fci <- [0..2], idx <- [0..5]]
+  in  filter isCanonical (rs ++ ts ++ bs)
 
 rotateList :: [a] -> [a]
 rotateList [] = []
@@ -169,11 +183,16 @@ rotateCycle c =
   }
 
 rotateC :: Int -> (FieldCoordinate -> FieldCoordinate)
-rotateC fci fc@(FieldCoordinate fci' co@(CycleCoordinate t idx))
-    | fci == fci' = fc {fcWithinCycle = CycleCoordinate t ((idx-1)%6)}
-    | otherwise   = fc
+rotateC fci fc = go (toCycle [fci] fc)
+  where
+    go fc@(FieldCoordinate fci' co@(CycleCoordinate t idx))
+        | fci == fci' = fc {fcWithinCycle = CycleCoordinate t ((idx-1) `mod` 6)}
+        | otherwise   = fc
 
-apply ::
+apply :: (FieldCoordinate -> FieldCoordinate) -> Field -> Field
+apply fn field =
+  let setters = [\f -> setelt (fn co) (getelt co field) f | co <- allCanonicalCoordinates]
+  in  appEndo (mconcat $ map Endo setters) field
 
 updateCycle :: Int -> [Int] -> [Cycle] -> Cycle
 updateCycle targetIdx srcIdxs cycles =
@@ -210,34 +229,12 @@ checkUniq f =
         then f
         else trace ("Field:\n" ++ show f ++ "\nList: " ++ show lst ++ "\nDiff: " ++ show (lst \\ nub lst)) f
 
-remapCycle :: Int -> [Cycle] -> Cycle
-remapCycle targetIdx cycles =
-  let field = Field cycles
-      getelt' fc = geteltX (canonicalize fc) field
-  in Cycle {
-       radial = map getelt' [mkRadial targetIdx idx | idx <- [0..5]],
-       triangles = map getelt' [mkTriangle targetIdx idx | idx <- [0..5]],
-       boundary = map getelt' [mkBoundary targetIdx idx | idx <- [0..5]]
-     }
-
 rotate0 :: Field -> Field
-rotate0 (Field [c0,c1,c2]) = checkUniq $ Field [c0', c1', c2']
-  where
-    c0' = rotateCycle c0
-    c1' = remapCycle 1 [c0', c1, c2]
-    c2' = remapCycle 2 [c0', c1, c2]
+rotate0 f = checkUniq $ apply (rotateC 0) f
 
 rotate1 :: Field -> Field
-rotate1 (Field [c0, c1, c2]) = checkUniq $ Field [c0', c1', c2']
-  where
-    c0' = remapCycle 0 [c0, c1', c2]
-    c1' = rotateCycle c1
-    c2' = remapCycle 2 [c0, c1', c2]
+rotate1 f = checkUniq $ apply (rotateC 1) f
 
 rotate2 :: Field -> Field
-rotate2 (Field [c0, c1, c2]) = checkUniq $ Field [c0', c1', c2']
-  where
-    c0' = remapCycle 0 [c0, c1, c2']
-    c1' = remapCycle 1 [c0, c1, c2']
-    c2' = rotateCycle c2
+rotate2 f = checkUniq $ apply (rotateC 2) f
 
