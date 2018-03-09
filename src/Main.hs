@@ -34,21 +34,27 @@ selectCycle (x,y) =
                         alpha = atan2 dy dx
                     in  (r < radius) && (alpha > alpha0) && (alpha < alpha1)
 
-selectTurn :: Bool -> Game -> Maybe Turn
+selectTurn :: Bool -> Game -> Game
 selectTurn cw g =
   case gSelectedCycle g of
-    Nothing -> Nothing
-    Just idx -> Just (Turn cw idx)
+    Nothing -> g
+    Just idx -> setTurn cw idx g
+
+setTurn :: Bool -> Int -> Game -> Game
+setTurn cw idx g =
+  case gCurrentTurn g of
+    Nothing -> g {gCurrentTurn = Just (Turn cw idx)}
+    Just _ -> g
 
 handler :: Event -> Game -> Game
-handler (EventKey (Char 'd') Up (Modifiers {shift=Up}) _) g = g {gCurrentTurn = Just (Turn True 0)}
-handler (EventKey (Char 'w') Up (Modifiers {shift=Up}) _) g = g {gCurrentTurn = Just (Turn True 1)}
-handler (EventKey (Char 'a') Up (Modifiers {shift=Up}) _) g = g {gCurrentTurn = Just (Turn True 2)}
-handler (EventKey (Char 'D') Up (Modifiers {shift=Down}) _) g = g {gCurrentTurn = Just (Turn False 0)}
-handler (EventKey (Char 'W') Up (Modifiers {shift=Down}) _) g = g {gCurrentTurn = Just (Turn False 1)}
-handler (EventKey (Char 'A') Up (Modifiers {shift=Down}) _) g = g {gCurrentTurn = Just (Turn False 2)}
-handler (EventKey (MouseButton LeftButton) Up _ _) g = g {gCurrentTurn = selectTurn False g}
-handler (EventKey (MouseButton RightButton) Up _ _) g = g {gCurrentTurn = selectTurn True g}
+handler (EventKey (Char 'd') Up (Modifiers {shift=Up}) _) g = setTurn True 0 g
+handler (EventKey (Char 'w') Up (Modifiers {shift=Up}) _) g = setTurn True 1 g
+handler (EventKey (Char 'a') Up (Modifiers {shift=Up}) _) g = setTurn True 2 g
+handler (EventKey (Char 'D') Up (Modifiers {shift=Down}) _) g = setTurn False 0 g
+handler (EventKey (Char 'W') Up (Modifiers {shift=Down}) _) g = setTurn False 1 g
+handler (EventKey (Char 'A') Up (Modifiers {shift=Down}) _) g = setTurn False 2 g
+handler (EventKey (MouseButton LeftButton) Up _ _) g = selectTurn False g
+handler (EventKey (MouseButton RightButton) Up _ _) g = selectTurn True g
 handler (EventMotion p) g = g {gSelectedCycle = selectCycle p'}
   where
     viewPort = viewStateViewPort (gView g)
