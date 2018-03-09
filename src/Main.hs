@@ -62,7 +62,7 @@ handler (EventMotion p) g = g {gSelectedCycle = selectCycle p'}
 handler evt g = g {gView = updateViewStateWithEvent evt (gView g)}
 
 secondsPerTurn :: Float
-secondsPerTurn = 1.0
+secondsPerTurn = 0.5
 
 animation :: Float -> Game -> Game
 animation dt g =
@@ -82,6 +82,18 @@ drawOverlay g =
       let (x0,y0) = cycleCenters !! idx
       in  translate x0 y0 $ color black $ thickCircle radius thickness
 
+checker :: Int -> Int -> CycleCoordinate -> Bool
+checker rotatedIdx drawnIdx co =
+    let idx' = (drawnIdx - rotatedIdx) `mod` 3
+        fc = FieldCoordinate drawnIdx co
+
+        match (fc2, FieldCoordinate fci _) = fc2 == fc && fci == rotatedIdx
+
+    in  case idx' of
+          0 -> True
+          1 -> fc `notElem` map fst allEquations
+          2 -> not $ any match allEquations
+
 drawAnimatedField :: Maybe Turn -> Float -> Field -> Picture
 drawAnimatedField Nothing _ f = drawField f
 drawAnimatedField (Just (Turn cw rotatedCycleIdx)) time (Field cycles) =
@@ -89,32 +101,21 @@ drawAnimatedField (Just (Turn cw rotatedCycleIdx)) time (Field cycles) =
   where
     draw idx cycle =
       let center = cycleCenters !! idx
-          picture = uncurry translate center $ drawCycle (check idx) cycle
+          picture = uncurry translate center $ drawCycle (checker rotatedCycleIdx idx) cycle
           sign = if cw then 1 else -1
           angle = fromIntegral sign * (time / secondsPerTurn) * 60
       in  if idx == rotatedCycleIdx
              then rotateAround center angle picture
              else picture
 
-    check idx co =
-      let idx' = (idx - rotatedCycleIdx) `mod` 3
-          fc = FieldCoordinate idx co
-
-          match (fc2, FieldCoordinate fci _) = fc2 == fc && fci == rotatedCycleIdx
-
-      in  case idx' of
-            0 -> True
-            1 -> fc `notElem` map fst allEquations
-            2 -> not $ any match allEquations
-
 render :: Game -> Picture
 render g =
   let viewPort = viewStateViewPort (gView g)
       baseField = drawAnimatedField (gCurrentTurn g) (gTime g) (gField g)
       overlay = drawOverlay g
-      timer = translate 200 0 $ scale 0.1 0.1 $ text $ printf "%0.4f" (gTime g)
+      -- timer = translate 200 0 $ scale 0.1 0.1 $ text $ printf "%0.4f" (gTime g)
       -- timer = translate 200 0 $ scale 0.1 0.1 $ text $ show (gCurrentTurn g)
-  in  applyViewPortToPicture viewPort $ pictures [baseField, overlay, timer]
+  in  applyViewPortToPicture viewPort $ pictures [baseField, overlay]
 
 main :: IO ()
 main = do

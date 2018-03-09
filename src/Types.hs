@@ -104,9 +104,13 @@ equations =
     ]
 
 allEquations :: [Equation]
-allEquations = equations `union` map swp equations
+allEquations = symmetric `union` closure symmetric
   where
     swp (c1,c2) = (c2, c1)
+
+    symmetric = equations `union` map swp equations 
+
+    closure eqs = [(fc1, fc3) | (fc1,fc2) <- symmetric, (fc2', fc3) <- symmetric, fc2 == fc2', fc1 /= fc3]
 
 isCanonical :: FieldCoordinate -> Bool
 isCanonical fc@(FieldCoordinate 0 _) = True
