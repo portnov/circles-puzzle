@@ -30,24 +30,21 @@ Mouse: point over one of circles (thick border will indicate that circle is
 selected) and press left mouse button to rotate it counterclockwise, or right
 mouse button to rotate it clockwise.
 
-Also standard controls to manipulate the viewport are available:
+Also controls provided by Gloss library to manipulate the viewport are available:
 
 * Quit            
   - esc-key
 
 * Move Viewport   
   - arrow keys
-  - left-click drag
 
 * Zoom Viewport
   - page up/down-keys
   - control-left-click drag
-  - right-click drag
   - mouse wheel
 
 * Rotate Viewport
   - home/end-keys
-  - alt-left-click drag
 
 * Reset Viewport
   r-key
