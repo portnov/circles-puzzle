@@ -9,12 +9,16 @@ import Graphics.Gloss.Interface.IO.Game
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Data.ViewState
 
+import Debug.Trace
+
 import Types
 import Circles
 
 data Game = Game {
     gField :: Field,
     gSelectedCycle :: Maybe Int,
+    gCurrentTurn :: Maybe Turn,
+    gTime :: Float,
     gView :: ViewState
   }
 
@@ -30,31 +34,39 @@ selectCycle (x,y) =
                         alpha = atan2 dy dx
                     in  (r < radius) && (alpha > alpha0) && (alpha < alpha1)
 
+selectTurn :: Bool -> Game -> Maybe Turn
+selectTurn cw g =
+  case gSelectedCycle g of
+    Nothing -> Nothing
+    Just idx -> Just (Turn cw idx)
+
 handler :: Event -> Game -> Game
-handler (EventKey (Char 'd') Up (Modifiers {shift=Up}) _) g = g {gField = rotateCw 0 (gField g)}
-handler (EventKey (Char 'w') Up (Modifiers {shift=Up}) _) g = g {gField = rotateCw 1 (gField g)}
-handler (EventKey (Char 'a') Up (Modifiers {shift=Up}) _) g = g {gField = rotateCw 2 (gField g)}
-handler (EventKey (Char 'D') Up (Modifiers {shift=Down}) _) g = g {gField = rotateCcw 0 (gField g)}
-handler (EventKey (Char 'W') Up (Modifiers {shift=Down}) _) g = g {gField = rotateCcw 1 (gField g)}
-handler (EventKey (Char 'A') Up (Modifiers {shift=Down}) _) g = g {gField = rotateCcw 2 (gField g)}
-handler (EventKey (MouseButton LeftButton) Up _ _) g = g {gField = rotate (gField g)}
-  where
-    rotate f = case gSelectedCycle g of
-                 Nothing -> f
-                 Just idx -> rotateCcw idx f
-handler (EventKey (MouseButton RightButton) Up _ _) g = g {gField = rotate (gField g)}
-  where
-    rotate f = case gSelectedCycle g of
-                 Nothing -> f
-                 Just idx -> rotateCw idx f
+handler (EventKey (Char 'd') Up (Modifiers {shift=Up}) _) g = g {gCurrentTurn = Just (Turn True 0)}
+handler (EventKey (Char 'w') Up (Modifiers {shift=Up}) _) g = g {gCurrentTurn = Just (Turn True 1)}
+handler (EventKey (Char 'a') Up (Modifiers {shift=Up}) _) g = g {gCurrentTurn = Just (Turn True 2)}
+handler (EventKey (Char 'D') Up (Modifiers {shift=Down}) _) g = g {gCurrentTurn = Just (Turn False 0)}
+handler (EventKey (Char 'W') Up (Modifiers {shift=Down}) _) g = g {gCurrentTurn = Just (Turn False 1)}
+handler (EventKey (Char 'A') Up (Modifiers {shift=Down}) _) g = g {gCurrentTurn = Just (Turn False 2)}
+handler (EventKey (MouseButton LeftButton) Up _ _) g = g {gCurrentTurn = selectTurn False g}
+handler (EventKey (MouseButton RightButton) Up _ _) g = g {gCurrentTurn = selectTurn True g}
 handler (EventMotion p) g = g {gSelectedCycle = selectCycle p'}
   where
     viewPort = viewStateViewPort (gView g)
     p' = invertViewPort viewPort p
 handler evt g = g {gView = updateViewStateWithEvent evt (gView g)}
 
+secondsPerTurn :: Float
+secondsPerTurn = 1.0
+
 animation :: Float -> Game -> Game
-animation _ = id
+animation dt g =
+  case gCurrentTurn g of
+    Nothing -> g 
+    Just turn ->
+      let newTime = gTime g + dt
+      in  if newTime >= secondsPerTurn
+            then g {gTime = 0.0, gCurrentTurn = Nothing, gField = makeTurn turn (gField g)}
+            else g {gTime = newTime}
 
 drawOverlay :: Game -> Picture
 drawOverlay g =
@@ -64,17 +76,44 @@ drawOverlay g =
       let (x0,y0) = cycleCenters !! idx
       in  translate x0 y0 $ color black $ thickCircle radius thickness
 
+drawAnimatedField :: Maybe Turn -> Float -> Field -> Picture
+drawAnimatedField Nothing _ f = drawField f
+drawAnimatedField (Just (Turn cw rotatedCycleIdx)) time (Field cycles) =
+    pictures $ zipWith draw [0..] cycles
+  where
+    draw idx cycle =
+      let center = cycleCenters !! idx
+          picture = uncurry translate center $ drawCycle (check idx) cycle
+          sign = if cw then 1 else -1
+          angle = fromIntegral sign * (time / secondsPerTurn) * 60
+      in  if idx == rotatedCycleIdx
+             then rotateAround center angle picture
+             else picture
+
+    check idx co =
+      let idx' = (idx - rotatedCycleIdx) `mod` 3
+          fc = FieldCoordinate idx co
+
+          match (fc2, FieldCoordinate fci _) = fc2 == fc && fci == rotatedCycleIdx
+
+      in  case idx' of
+            0 -> True
+            1 -> fc `notElem` map fst allEquations
+            2 -> not $ any match allEquations
+
 render :: Game -> Picture
 render g =
   let viewPort = viewStateViewPort (gView g)
-      baseField = drawField (gField g)
+      baseField = drawAnimatedField (gCurrentTurn g) (gTime g) (gField g)
       overlay = drawOverlay g
-  in  applyViewPortToPicture viewPort $ pictures [baseField, overlay]
+      timer = translate 200 0 $ scale 0.1 0.1 $ text $ printf "%0.4f" (gTime g)
+      -- timer = translate 200 0 $ scale 0.1 0.1 $ text $ show (gCurrentTurn g)
+  in  applyViewPortToPicture viewPort $ pictures [baseField, overlay, timer]
 
 main :: IO ()
 main = do
   let mode = InWindow "Circles" (800, 600) (0,0)
-  let game = Game initialField Nothing viewStateInit
+  let game = Game initialField Nothing Nothing 0 viewStateInit
   print initialField
-  play mode white 100 game render handler animation
+  play mode white 10 game render handler animation
 

@@ -59,6 +59,12 @@ piece3 dt radius = pictures [
 label :: String -> Picture -> Picture
 label str p = pictures [p, scale 0.07 0.07 $ color black (text str)]
 
+rotateAround :: Point -> Float -> Picture -> Picture
+rotateAround (x0,y0) alpha p =
+  translate x0 y0 $
+  rotate alpha $
+  translate (-x0) (-y0) p
+
 drawCycle :: (CycleCoordinate -> Bool) -> Cycle -> Picture
 drawCycle check c = pictures $
     map drawRadial (enumerate $ radial c) ++ 

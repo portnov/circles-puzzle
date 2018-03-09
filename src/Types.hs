@@ -116,7 +116,6 @@ isCanonical fc@(FieldCoordinate 2 _) = not $ any check allEquations
     check (fc2, FieldCoordinate 0 _) = fc2 == fc
     check _ = False
 
-
 canonicalize :: FieldCoordinate -> FieldCoordinate
 canonicalize fc =
   case lookup fc allEquations of
@@ -156,7 +155,9 @@ seteltX :: FieldCoordinate -> Piece -> Field -> Field
 seteltX (FieldCoordinate fci co) p (Field cycles) = Field $ cycles & element fci %~ seteltC co p
 
 setelt :: FieldCoordinate -> Piece -> Field -> Field
-setelt fc p f = seteltX (canonicalize fc) p f
+setelt fc p field =
+  let setters = [seteltX fc2 p | (fc1, fc2) <- allEquations, fc1 == fc]
+  in  seteltX fc p $ appEndo (mconcat $ map Endo setters) field
 
 seteltC :: CycleCoordinate -> Piece -> Cycle -> Cycle
 seteltC (CycleCoordinate Radial idx) p c = c {radial = radial c & element idx .~ p}
@@ -233,4 +234,11 @@ rotateCw idx f = checkUniq $ apply (rotateCycleClockwise idx) f
 
 rotateCcw :: Int -> Field -> Field
 rotateCcw idx f = checkUniq $ apply (rotateCycleCounterClockwise idx) f
+
+data Turn = Turn Bool Int
+  deriving (Eq, Show)
+
+makeTurn :: Turn -> Field -> Field
+makeTurn (Turn True idx) f = rotateCw idx f
+makeTurn (Turn False idx) f = rotateCcw idx f
 
